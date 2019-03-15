@@ -1,0 +1,253 @@
+#define NDATAPINS 8
+#define NADDRESSPINS 17
+#define PAGESIZE 128
+#define NPAGES 8192
+
+struct pin_t {
+  volatile uint8_t *r;
+  uint8_t b;
+};
+
+int writeEnablePinNumber = 22;
+pin_t writeEnable;
+
+int outputEnablePinNumber = 36;
+pin_t outputEnable;
+
+int dataPinNumbers[] = {49, 51, 53, 50, 48, 46, 44, 42};
+pin_t dataPins[NDATAPINS];
+
+int addressPinNumbers[] = {12, 11, 10, 9, 8, 7, 6, 5, 30, 32, 38, 34, 4, 28, 26, 3, 2};
+pin_t addressPins[NADDRESSPINS];
+
+
+// Raw byte data (cut in two due to variable size limitations)
+const PROGMEM byte ucode_bytes1[] = { {% for ub in ucode_bytes1 %}{{ ub }}, {% endfor %} };
+const PROGMEM byte ucode_bytes2[] = { {% for ub in ucode_bytes2 %}{{ ub }}, {% endfor %} };
+
+void initPins() {
+  int pinNumber;
+
+  writeEnable.r = portOutputRegister(digitalPinToPort(writeEnablePinNumber));
+  writeEnable.b = digitalPinToBitMask(writeEnablePinNumber);
+  pinMode(writeEnablePinNumber, OUTPUT);
+  digitalWrite(writeEnablePinNumber, HIGH);
+
+  outputEnable.r = portOutputRegister(digitalPinToPort(outputEnablePinNumber));
+  outputEnable.b = digitalPinToBitMask(outputEnablePinNumber);
+  pinMode(outputEnablePinNumber, OUTPUT);
+  digitalWrite(outputEnablePinNumber, HIGH);
+
+  for(int i = 0; i < NDATAPINS; i++) {
+    pinNumber = dataPinNumbers[i];
+    dataPins[i].r = portOutputRegister(digitalPinToPort(pinNumber));
+    dataPins[i].b = digitalPinToBitMask(pinNumber);
+    pinMode(pinNumber, OUTPUT);
+    digitalWrite(pinNumber, LOW);
+  }
+
+  for(int i=0; i<NADDRESSPINS; i++) {
+    pinNumber = addressPinNumbers[i];
+    addressPins[i].r = portOutputRegister(digitalPinToPort(pinNumber));
+    addressPins[i].b = digitalPinToBitMask(pinNumber);
+    pinMode(pinNumber, OUTPUT);
+    digitalWrite(pinNumber, LOW);
+  }
+}
+
+
+void pinLow(pin_t pin) {
+  *pin.r &= ~pin.b;
+}
+
+
+void pinHigh(pin_t pin) {
+  *pin.r |= pin.b;
+}
+
+
+void writePin(pin_t pin, uint8_t val) {
+  if(val == LOW) {
+     *pin.r &= ~pin.b;
+  }
+  else {
+     *pin.r |= pin.b;
+  }
+}
+
+
+void setPinsToDefaultForReading() {
+  for (int p = 0; p < NDATAPINS; p++) {
+    pinMode(dataPinNumbers[p], INPUT);
+  }
+  for(int p = 0; p < NADDRESSPINS; p++) {
+    pinMode(addressPinNumbers[p], OUTPUT);
+  }
+
+  pinMode(outputEnablePinNumber, OUTPUT);
+  digitalWrite(outputEnablePinNumber, LOW); // always read
+  pinMode(writeEnablePinNumber, OUTPUT);
+  digitalWrite(writeEnablePinNumber, HIGH);
+
+  delay(10);
+}
+
+
+void setPinsToDefaultForWriting() {
+  for (int p = 0; p < NDATAPINS; p++) {
+    pinMode(dataPinNumbers[p], OUTPUT);
+    digitalWrite(dataPinNumbers[p], LOW);
+  }
+  for(int p = 0; p < NADDRESSPINS; p++) {
+    pinMode(addressPinNumbers[p], OUTPUT);
+  }
+
+  pinMode(outputEnablePinNumber, OUTPUT);
+  digitalWrite(outputEnablePinNumber, HIGH);
+  pinMode(writeEnablePinNumber, OUTPUT);
+  digitalWrite(writeEnablePinNumber, HIGH);
+
+  delay(10);
+}
+
+
+void outputAddress(unsigned long address) {
+  for (int p = 0; p < NADDRESSPINS; p++) {
+    writePin(addressPins[p], address & 1);
+    address = address >> 1;
+  }
+}
+
+
+byte readEEPROM(unsigned long address) {
+  outputAddress(address);
+
+  // Perform the read
+  byte data = 0;
+  for(int p = 0; p < NDATAPINS; p++) {
+    data = data + (digitalRead(dataPinNumbers[p]) << p);
+  }
+  return data;
+}
+
+
+void writeEEPROM(unsigned long address, byte data) {
+  // End the previous write if there was one
+  writePin(writeEnable, HIGH);
+
+  // Show the new address to the EEPROM
+  outputAddress(address);
+
+  // Set up the data
+  for (int p = 0; p < NDATAPINS; p++) {
+    writePin(dataPins[p], data & 1);
+    data = data >> 1;
+  }
+
+  // Start the write
+  writePin(writeEnable, LOW);
+}
+
+void startPageWrite(int page) {
+  for (int i = 0; i < 16; i++)  { // the first 2-16 bytes written in each page are skipped for some reason, so write 16 useless bytes
+    writeEEPROM(page*PAGESIZE, 0xff);
+  }
+}
+
+
+void endPageWrite() {
+  writePin(writeEnable, HIGH);
+  delay(20);
+}
+
+
+
+void printPage(int page) {
+  char buf[80];
+  byte data[16];
+  unsigned long start = page * PAGESIZE;
+
+  sprintf(buf, "\nPage %d", page);
+  Serial.println(buf);
+  Serial.flush();
+
+  for (int base=0; base<PAGESIZE; base += 16) // for every 16 addresses in the EEPROM
+  {
+    for (int offset=0; offset<16; offset++) // for each address within the current set of 16 addresses
+    {
+      data[offset] = readEEPROM(start + base + offset);
+    }
+
+    sprintf(buf, "%05lx: %02x %02x %02x %02x %02x %02x %02x %02x   %02x %02x %02x %02x %02x %02x %02x %02x",
+      start + base, data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7], data[8], data[9], data[10],
+      data[11], data[12], data[13], data[14], data[15]);
+    // the %05lx above has an L, not a one
+
+    Serial.println(buf);
+    Serial.flush();
+  }
+}
+
+
+
+void setup() {
+  // put your setup code here, to run once:
+  char buf[80];
+  //int npages = 4;
+  unsigned long nbytes = (unsigned long)pow(2, 15);
+  unsigned long startAddress = 0;
+  unsigned long maxAddress = startAddress + nbytes; //npages*PAGESIZE;
+
+  Serial.begin(115200);
+  while(!Serial) {
+    delay(10);
+  }
+
+//  sprintf(buf, "NBytes: %lu", nbytes);
+//  Serial.println(buf);
+//
+  initPins();
+  setPinsToDefaultForWriting();
+  Serial.println("Programming EEPROM");
+  Serial.flush();
+
+  for(unsigned long address=startAddress; address<maxAddress; address++) {
+    if((address % PAGESIZE)== 0) {
+      if(address > 0) {
+        endPageWrite();
+      }
+      startPageWrite(address/PAGESIZE);
+//      sprintf(buf, "Page: %d, address: %d", address/PAGESIZE, address);
+//      Serial.println(buf);
+//      Serial.flush();
+      if((address % (16*PAGESIZE)) == 0) {
+        Serial.print(".");
+      }
+    }
+
+    if(address < nbytes/2) {
+      writeEEPROM(address, pgm_read_byte_near(ucode_bytes1 + address));
+    }
+    else {
+      writeEEPROM(address, pgm_read_byte_near(ucode_bytes2 + address - nbytes/2));
+    }
+  }
+  endPageWrite();
+
+  Serial.println("done!");
+  Serial.flush();
+
+  if(0) {
+    setPinsToDefaultForReading();
+
+    for(int i=0; i<nbytes/PAGESIZE; i++) {
+      printPage(i);
+    }
+    Serial.println("\nDone reading");
+    Serial.flush();
+  }
+}
+
+void loop() {
+  // put your main code here, to run repeatedly:
+}

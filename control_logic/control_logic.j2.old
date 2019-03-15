@@ -1,0 +1,224 @@
+#define SHIFT_DATA 2
+#define SHIFT_CLK 3
+#define SHIFT_LATCH 4
+#define EEPROM_D0 5
+#define EEPROM_D7 12
+
+#define READ_EN A0
+#define WRITE_EN A1
+
+/* Used with Greenliant 1Mbit EEPROM */
+#define NPAGES 8192
+#define PAGESIZE 128
+
+const PROGMEM byte ucode_bytes1[] = { {% for ub in ucode_bytes1 %}{{ ub }}, {% endfor %} };
+const PROGMEM byte ucode_bytes2[] = { {% for ub in ucode_bytes2 %}{{ ub }}, {% endfor %} };
+
+/*
+ * Sets all the pins for reading from the EEPROM. Don't have to manually handle EEPROM_READ_EN for reading.
+ * No delay in this function.
+ */
+void setPinsToDefaultForReading()
+{
+  for (int pin = EEPROM_D0; pin <= EEPROM_D7; pin++) // for each data pin
+  {
+    pinMode(pin, INPUT);
+  }
+
+  pinMode(SHIFT_DATA, OUTPUT);
+  digitalWrite(SHIFT_DATA, LOW);
+  pinMode(SHIFT_CLK, OUTPUT);
+  digitalWrite(SHIFT_CLK, LOW);
+  pinMode(SHIFT_LATCH, OUTPUT);
+  digitalWrite(SHIFT_LATCH, LOW);
+  //pinMode(SHIFT_CLR, OUTPUT);
+  //digitalWrite(SHIFT_CLR, HIGH);
+
+  pinMode(READ_EN, OUTPUT);
+  digitalWrite(READ_EN, LOW); // always read
+  pinMode(WRITE_EN, OUTPUT);
+  digitalWrite(WRITE_EN, HIGH);
+}
+
+
+/*
+ * Sets all the pins for writing to the EEPROM. Still have to manually handle EEPROM_WRITE_EN for writing.
+ * No delay in this function.
+ */
+void setPinsToDefaultForWriting()
+{
+  for (int pin = EEPROM_D0; pin <= EEPROM_D7; pin++) // for each data pin
+  {
+    pinMode(pin, OUTPUT);
+    digitalWrite(pin, LOW);
+  }
+
+  pinMode(SHIFT_DATA, OUTPUT);
+  digitalWrite(SHIFT_DATA, LOW);
+  pinMode(SHIFT_CLK, OUTPUT);
+  digitalWrite(SHIFT_CLK, LOW);
+  pinMode(SHIFT_LATCH, OUTPUT);
+  digitalWrite(SHIFT_LATCH, LOW);
+  //pinMode(SHIFT_CLR, OUTPUT);
+  //digitalWrite(SHIFT_CLR, HIGH);
+
+  pinMode(READ_EN, OUTPUT);
+  digitalWrite(READ_EN, HIGH);
+  pinMode(WRITE_EN, OUTPUT);
+  digitalWrite(WRITE_EN, HIGH);
+}
+
+/*
+   Output the address bits and outputEnable signal using shift registers.
+*/
+void shiftAddress(unsigned long address) {
+  shiftOut(SHIFT_DATA, SHIFT_CLK, LSBFIRST, address);
+  shiftOut(SHIFT_DATA, SHIFT_CLK, LSBFIRST, (address >> 8));
+  shiftOut(SHIFT_DATA, SHIFT_CLK, LSBFIRST, (address >> 16));
+}
+
+
+/*
+   Read a byte from the EEPROM at the specified address.
+*/
+byte readEEPROM(unsigned long address) {
+  // Set up and show the address
+  shiftAddress(address);
+  digitalWrite(SHIFT_LATCH, HIGH);
+  digitalWrite(SHIFT_LATCH, LOW);
+
+  // Perform the read
+  byte data = 0;
+  for (int pin = EEPROM_D7; pin >= EEPROM_D0; pin--) {
+    data = (data << 1) + digitalRead(pin);
+  }
+  return data;
+}
+
+
+/*
+   Write a byte to the EEPROM at the specified address.
+*/
+void writeEEPROM(unsigned long address, byte data) {
+  // Set up the address
+  shiftAddress(address);
+  
+  // End the previous write if there was one
+  digitalWrite(WRITE_EN, HIGH);
+
+  // Show the new address to the EEPROM
+  digitalWrite(SHIFT_LATCH, HIGH);
+  digitalWrite(SHIFT_LATCH, LOW);
+
+  // Set up the data
+  for (int pin = EEPROM_D0; pin <= EEPROM_D7; pin++) {
+    digitalWrite(pin, data & 1);
+    data = data >> 1;
+  }
+  
+  // Start the write
+  digitalWrite(WRITE_EN, LOW);
+}
+
+
+void startPageWrite(int page) {
+  for (int i = 0; i < 16; i++)  { // the first 2-16 bytes written in each page are skipped for some reason, so write 16 useless bytes
+    writeEEPROM(page*PAGESIZE, 0xff);
+  }
+}
+
+
+void endPageWrite()
+{
+  digitalWrite(WRITE_EN, HIGH);
+  delay(20);
+}
+
+
+void printPage(int page)
+{
+  char buf[80];
+  byte data[16];
+  unsigned long start = page * PAGESIZE;
+
+  sprintf(buf, "\nPage %d", page);
+  Serial.println(buf);
+  Serial.flush();
+  
+  for (int base=0; base<PAGESIZE; base += 16) // for every 16 addresses in the EEPROM
+  {
+    for (int offset=0; offset<16; offset++) // for each address within the current set of 16 addresses
+    {
+      data[offset] = readEEPROM(start + base + offset);
+    }
+    
+    sprintf(buf, "%05lx: %02x %02x %02x %02x %02x %02x %02x %02x   %02x %02x %02x %02x %02x %02x %02x %02x",
+      start + base, data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7], data[8], data[9], data[10],
+      data[11], data[12], data[13], data[14], data[15]);
+    // the %05lx above has an L, not a one
+
+    Serial.println(buf);
+    Serial.flush();
+  }
+}
+
+
+void bypassSDP()
+{
+  writeEEPROM(0x5555, 0xAA);
+  writeEEPROM(0x2AAA, 0x55);
+  writeEEPROM(0x5555, 0xA0);
+}
+
+
+void setup() {
+  // put your setup code here, to run once:
+  char buf[80];
+  int npages = 128;
+  
+  // Set up serial communication
+  Serial.begin(9600);
+  // wait for serial port to connect. Needed for Leonardo only
+  while (!Serial) {
+    delay(10);
+  }
+
+  setPinsToDefaultForWriting();
+  Serial.println("Programming EEPROM");
+  Serial.flush();
+
+  int startAddress = 0;
+  int maxAddress = startAddress + npages*PAGESIZE;
+
+  for(int address=startAddress; address<maxAddress; address++) {
+
+    if((address % PAGESIZE)== 0) {
+      if(address > 0) {
+        endPageWrite();
+      }
+      startPageWrite(address/PAGESIZE);
+      if((address % (32*PAGESIZE)) == 0) {
+        Serial.print(".");
+      }
+    }
+    writeEEPROM(address, pgm_read_byte_near(ucode_bytes + address));
+  }
+  endPageWrite();
+  
+  
+  Serial.println("done!");
+  Serial.flush();
+
+  // *** CHECK WHAT WAS WRITTEN ***
+  setPinsToDefaultForReading();
+  for(int i=0; i<npages; i++) {
+    printPage(i);
+  }
+  Serial.println("\nDone reading");
+  Serial.flush();
+}
+
+void loop() {
+  // put your main code here, to run repeatedly:
+
+}
