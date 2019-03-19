@@ -2,6 +2,8 @@
 #define NADDRESSPINS 17
 #define PAGESIZE 128
 #define NPAGES 8192
+#define ARRAY_SIZE {{ arraysize }}
+#define NDATA_ARRAYS {{ 2**17 // arraysize }}
 
 struct pin_t {
   volatile uint8_t *r;
@@ -21,9 +23,13 @@ int addressPinNumbers[] = {12, 11, 10, 9, 8, 7, 6, 5, 30, 32, 38, 34, 4, 28, 26,
 pin_t addressPins[NADDRESSPINS];
 
 
-// Raw byte data (cut in two due to variable size limitations)
-const PROGMEM byte ucode_bytes1[] = { {% for ub in ucode_bytes1 %}{{ ub }}, {% endfor %} };
-const PROGMEM byte ucode_bytes2[] = { {% for ub in ucode_bytes2 %}{{ ub }}, {% endfor %} };
+// Raw byte data (cut in parts due to variable size limitations)
+
+{% for i in range(2**17 // arraysize) %}
+const PROGMEM byte ucode_bytes{{ i }}[] = { {% for ub in ucode_bytes[i*arraysize:(i+1)*arraysize] %}{{ ub }}, {% endfor %} };
+{% endfor %}
+
+const byte array_pointers[] = { {% for i in range(2**17 // arraysize) %} &ucode_bytes{{ i }}, {% endfor %} };
 
 void initPins() {
   int pinNumber;
@@ -194,7 +200,7 @@ void setup() {
   // put your setup code here, to run once:
   char buf[80];
   //int npages = 4;
-  unsigned long nbytes = (unsigned long)pow(2, 15);
+  unsigned long nbytes = (unsigned long)pow(2, 17);
   unsigned long startAddress = 0;
   unsigned long maxAddress = startAddress + nbytes; //npages*PAGESIZE;
 
@@ -225,12 +231,17 @@ void setup() {
       }
     }
 
-    if(address < nbytes/2) {
-      writeEEPROM(address, pgm_read_byte_near(ucode_bytes1 + address));
-    }
-    else {
-      writeEEPROM(address, pgm_read_byte_near(ucode_bytes2 + address - nbytes/2));
-    }
+    int array_index = address / ARRAY_SIZE;
+    int index_into_array = address % ARRAY_SIZE;
+
+    writeEEPROM(address, pgm_read_byte_near(array_pointers[array_index] + index_into_array));
+
+    //if(address < nbytes/2) {
+    //  writeEEPROM(address, pgm_read_byte_near(ucode_bytes1 + address));
+    //}
+    //else {
+    //  writeEEPROM(address, pgm_read_byte_near(ucode_bytes2 + address - nbytes/2));
+    //}
   }
   endPageWrite();
 
