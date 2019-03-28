@@ -229,38 +229,43 @@ UCODE_TEMPLATE = [
 # sys.exit()
 
 # Instructions per flag combination
+# Flags:
+# - Positive overflow
+# - Nagative overflow
+# - Zero
+# - Negative
 
-# Flags  0: carry 0, zero 0, negative 0, overflow 0
+# Flags  0: positive overflow 0, negative overflow 0, zero 0, negative 0
 f00 = deepcopy(UCODE_TEMPLATE)
-# Flags  1: carry 0, zero 0, negative 0, overflow 1
+# Flags  1: positive overflow 1, negative overflow 0, zero 0, negative 0
 f01 = deepcopy(UCODE_TEMPLATE)
-# Flags  2: carry 0, zero 0, negative 1, overflow 0
+# Flags  2: positive overflow 0, negative overflow 1, zero 0, negative 0
 f02 = deepcopy(UCODE_TEMPLATE)
-# Flags  3: carry 0, zero 0, negative 1, overflow 1
+# Flags  3: positive overflow 1, negative overflow 1, zero 0, negative 0
 f03 = deepcopy(UCODE_TEMPLATE)
-# Flags  4: carry 0, zero 1, negative 0, overflow 0
+# Flags  4: positive overflow 0, negative overflow 0, zero 1, negative 0
 f04 = deepcopy(UCODE_TEMPLATE)
-# Flags  5: carry 0, zero 1, negative 0, overflow 1
+# Flags  5: positive overflow 1, negative overflow 0, zero 1, negative 0
 f05 = deepcopy(UCODE_TEMPLATE)
-# Flags  6: carry 0, zero 1, negative 1, overflow 0
+# Flags  6: positive overflow 0, negative overflow 1, zero 1, negative 0
 f06 = deepcopy(UCODE_TEMPLATE)
-# Flags  7: carry 0, zero 1, negative 1, overflow 1
+# Flags  7: positive overflow 1, negative overflow 1, zero 1, negative 0
 f07 = deepcopy(UCODE_TEMPLATE)
-# Flags  8: carry 1, zero 0, negative 0, overflow 0
+# Flags  8: positive overflow 0, negative overflow 0, zero 0, negative 1
 f08 = deepcopy(UCODE_TEMPLATE)
-# Flags  9: carry 1, zero 0, negative 0, overflow 1
+# Flags  9: positive overflow 1, negative overflow 0, zero 0, negative 1
 f09 = deepcopy(UCODE_TEMPLATE)
-# Flags 10: carry 1, zero 0, negative 1, overflow 0
+# Flags 10: positive overflow 0, negative overflow 1, zero 0, negative 1
 f10 = deepcopy(UCODE_TEMPLATE)
-# Flags 11: carry 1, zero 0, negative 1, overflow 1
+# Flags 11: positive overflow 1, negative overflow 1, zero 0, negative 1
 f11 = deepcopy(UCODE_TEMPLATE)
-# Flags 12: carry 1, zero 1, negative 0, overflow 0
+# Flags 12: positive overflow 0, negative overflow 0, zero 1, negative 1
 f12 = deepcopy(UCODE_TEMPLATE)
-# Flags 13: carry 1, zero 1, negative 0, overflow 1
+# Flags 13: positive overflow 1, negative overflow 0, zero 1, negative 1
 f13 = deepcopy(UCODE_TEMPLATE)
-# Flags 14: carry 1, zero 1, negative 1, overflow 0
+# Flags 14: positive overflow 0, negative overflow 1, zero 1, negative 1
 f14 = deepcopy(UCODE_TEMPLATE)
-# Flags 15: carry 1, zero 1, negative 1, overflow 1
+# Flags 15: positive overflow 1, negative overflow 1, zero 1, negative 1
 f15 = deepcopy(UCODE_TEMPLATE)
 
 microinstructions = [f00, f01, f02, f03, f04, f05, f06, f07, f08, f09, f10, f11, f12, f13, f14, f15]
@@ -293,7 +298,7 @@ for address in range(2**17):
     unused1 =     (address & 0b00000100000000000) >> 11
     flags1 =      (address & 0b00001000000000000) >> 12  # Just correct for the unused bit on the right
     unused2 =     (address & 0b00010000000000000) >> 13
-    flags2 =      (address & 0b11100000000000000) >> 14
+    flags2 =      (address & 0b11100000000000000) >> 13  # As one bit is still needed for flags1
     flags = flags1 + flags2
 
     # Get micro-instruction
@@ -302,6 +307,7 @@ for address in range(2**17):
     # Get byte: byte 0 is LSB
     byte = (uinstruction >> (byte_sel * 8)) & 255
     ucode_bytes.append(byte)
+    print(flags)
 
 template_loader = jinja2.FileSystemLoader(".")
 env = jinja2.Environment(loader=template_loader)
