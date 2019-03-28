@@ -1,9 +1,6 @@
 #define NDATAPINS 8
 #define NADDRESSPINS 17
 #define PAGESIZE 128
-#define NPAGES 8192
-#define ARRAY_SIZE 16384
-#define NDATA_ARRAYS 8
 
 // Signals
 #define HLT 0b00000000000000000000000000000001 // Halt clock
@@ -336,7 +333,7 @@ void setup() {
         step =        (address & 0b00000000111100000) >> 5;
         byte_sel =    (address & 0b00000011000000000) >> 9;
         unused =      (address & 0b00000100000000000) >> 11;
-        flags1 =      (address & 0b00001000000000000) >> 12;  // Just correct for the unused bit on the right
+        flags1 =      (address & 0b00001000000000000) >> 12;
         unused =      (address & 0b00010000000000000) >> 13;
         flags2 =      (address & 0b11100000000000000) >> 13;
         flags = flags1 + flags2;
