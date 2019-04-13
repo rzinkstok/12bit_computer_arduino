@@ -1,0 +1,32 @@
+X  0 0 0000 TC      Transfer control: take next instruction from K; stores I+1 in Q
+   1 0 0001 GOJ     Start
+   2 0 0010 CCS     Count, compare, and skip: four way (-, -0, +0, +) comparison of c(E)
+   3 0 0011 INCR    Increment: adds +1 to c(E)
+X  4 0 0100 ADS     Add and store: adds c(A) to c(E) and store in A and E
+X  5 0 0101 CA      Clear and add: copies c(K) into A
+x  6 0 0110 TS      Transfer to storage: if c(A) is not an overflow quantity, copies c(A) into K; if c(A) is positive overflow, copies c(A) into K, sets c(A) to +1; if c(A) is negative overflow, copies c(A) into K, sets c(A) to -1
+   7 0 0111 XCH     Exchange A: exchanges c(A) with c(E)
+X  8 0 1000 AD      Add: add c(K) to A
+X  9 0 1001 BZF     Branch on zero to fixed memory: next instruction from F if A is +0
+X 10 0 1010 BZMF    Branch on zero or minus to fixed memory: next instruction from F if A is +0 or negative
+X 11 0 1011 AOUT    Output A: copy c(A) to output register
+X 12 0 1100 OUT     Ouput: copy c(E) to output register
+X 13 0 1101 SU      Subtract: subtracts c(A) from c(E); stores result in A
+X 14 0 1110 EXTEND  Extend order code field
+X 15 0 1111 HLT     Halt the clock
+  16 1 0000 CS      Clear and subtract: copies complement of c(K) into A
+  17 1 0001 NDX     Index basic / extracode 15 (2 instructions): adds c(K) to c(I+1) where I is location of NDX E; takes sum of c(K) + c(I+1) as next instruction
+  18 1 0010 AUG     Augment: adds +1 to abs(E)
+  19 1 0011 DIM     Diminish: adds -1 to abs(E)
+  20 1 0100
+  21 1 0101
+  22 1 0110
+  23 1 0111
+  24 1 1000
+  25 1 1001
+  26 1 1010
+  27 1 1011
+  28 1 1100
+  29 1 1101
+  30 1 1110
+  31 1 1111

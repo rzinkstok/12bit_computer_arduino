@@ -26,6 +26,12 @@
 #define EXT 0b00000000000001000000000000000000 // Extend
 #define CEX 0b00000000000010000000000000000000 // Clear extend
 
+// Flags
+#define NEG 0b1000 // Negative number on bus
+#define ZER 0b0100 // Zero number on bus (both positive and negative)
+#define NOF 0b0010 // Negative overflow in ALU
+#define POF 0b0001 // Positive overflow in ALU
+
 
 struct pin_t {
     volatile uint8_t *r;
@@ -221,43 +227,59 @@ byte get_ucode_byte(int instruction, int step, int flags, int byte_sel) {
             break;
         case 2:
             if(
-                (instruction == 5) | 
-                (instruction == 6) | 
-                (instruction == 8) | 
-                (instruction == 12) | 
-                (instruction == 13)
+                (instruction == 5) | // CA
+                (instruction == 6) | // TS
+                (instruction == 8) | // AD
+                (instruction == 12) | // OUT
+                (instruction == 13) // SU
             ) {
                 ucode = IRO | MAI;
                 break;
             }
         
-            if(instruction == 0) {
+            if(instruction == 0) { // TC
                 ucode = IRO | JMP;
             }
-            if(instruction == 11) {
+            if(
+                (instruction == 9) | // BZF
+                (instruction == 10) // BZMF
+            ){ 
+                ucode = ARO | FRI;
+            }
+            if(instruction == 11) { // AOUT
                 ucode = ARO | ORI;
             }
-            if(instruction == 14) {
+            if(instruction == 14) { // EXTEND
                 ucode = EXT;
             }
-            if(instruction == 15) {
+            if(instruction == 15) { // HLT
                 ucode = HLT;
             }
             break;
         case 3:
-            if(instruction == 5) {
+            if(instruction == 5) { // CA
                 ucode = RDO | ARI;
             }
-            if(instruction == 6) {
+            if(instruction == 6) { // TS
                 ucode = ARO | RDI;
             }
-            if(instruction == 8) {
+            if(instruction == 8) { // AD
                 ucode = RDO | BRI;
             }
-            if(instruction == 12) {
+            if(instruction == 9) { // BZF
+                if(flags & ZER) {  // AGC has only +0
+                    ucode = IRO | JMP;
+                }
+            }
+            if(instruction == 10) { // BZMF
+                if((flags & ZER) | (flags & NEG)) {
+                    ucode = IRO | JMP;
+                }
+            }
+            if(instruction == 12) { // OUT
                 ucode = RDO | ORI;
             }
-            if(instruction == 13) {
+            if(instruction == 13) { // SU
                 ucode = RDO | BRI;
             }
             break;
